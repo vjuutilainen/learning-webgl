@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Learning WebGL</title>
+  <style type="text/css">
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: Arial;
+    }
+  </style>
+  <script type="text/javascript">
+
+    window.onload = () => {
+
+      // Set up canvas and WebGL context 
+      let canvas = document.getElementById('canvas');
+      canvas.setAttribute('width', window.innerWidth);
+      canvas.setAttribute('height', window.innerHeight);
+      let gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      gl.viewport(0, 0, canvas.width, canvas.height);
+
+      // The uniform variables to be used in shaders
+      let u_time = null;
+      let u_resolution = null;
+
+      // Enable depth testing, and pass if the incoming value equals the the depth buffer value
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LEQUAL);
+
+      // The color the use for clearing color buffers
+      gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+      // Buffers
+      let positionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+      // What will be drawn
+      
+      // Vertices for GL_TRIANGLE_FAN, for making a rectangle
+      // The first vertex is a hub and the following connect with the previous non-starting vertex and the hub.
+      let vertices = [
+          -1.0, -1.0, // bottom left
+          +1.0, -1.0, // bottom right
+          +1.0, +1.0, // top right
+          -1.0, +1.0  // top left
+      ];
+
+      // GLSL code source for vertex shaders = vertex position and shape
+      const v_src = `
+
+      attribute vec2 a_position;
+
+      void main(void) {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+      }
+
+      `;
+
+      // GLSL code source for fragment shaders = pixel color
+      const f_src = `
+
+      precision highp float;
+      uniform float u_time;
+      uniform vec2 u_resolution;
+
+      void main(void) {
+        float time = abs(sin(u_time * 0.001));
+
+        // This gives us the current pixels coordinates between 0 and 1
+        vec2 resolution = vec2(gl_FragCoord.xy / u_resolution);
+
+        // We can create a line creating a step value and then subtracting another step value
+        float stepremains = smoothstep(0.4, 0.41, resolution.x) - smoothstep(0.59, 0.6, resolution.x);
+
+        // We still want to make the color pulsate
+        vec3 color = vec3(0.0, 0.0, stepremains * time);
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+
+      `;
+
+
+      // Set up the program and uniform variables
+
+      let program = gl.createProgram();
+
+      let vertexShader = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vertexShader, v_src);
+      gl.compileShader(vertexShader);
+
+      let fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fragmentShader, f_src);
+      gl.compileShader(fragmentShader);
+
+      gl.attachShader(program, vertexShader);
+      gl.attachShader(program, fragmentShader);
+      
+      gl.linkProgram(program);
+      gl.useProgram(program);
+      
+      let positionAttribute = gl.getAttribLocation(program, 'a_position');
+      gl.enableVertexAttribArray(positionAttribute);
+      gl.vertexAttribPointer(positionAttribute, 2, gl.FLOAT, false, 0, 0);
+      
+      u_time = gl.getUniformLocation(program, 'u_time');
+      gl.uniform1f(u_time, 0);
+      
+      u_resolution = gl.getUniformLocation(program, 'u_resolution');
+      gl.uniform2fv(u_resolution, [canvas.width, canvas.height]);
+
+
+      // Set up the main functions
+      
+      const draw = () => {
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+      };
+
+      const animate = () => {
+        let start = Date.now();
+        let tick = () => {
+          requestAnimationFrame(tick);
+          let now = Date.now();
+          let time = now - start;
+          gl.uniform1f(u_time, time); // update the time variable for the shader program
+          draw();
+        }
+        requestAnimationFrame(tick);
+      }
+
+      // Set new size and render on resize
+      window.onresize = () => {
+        canvas.setAttribute('width', window.innerWidth);
+        canvas.setAttribute('height', window.innerHeight);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.uniform2fv(u_resolution, [canvas.width, canvas.height]); // update the resolution variable for the shader program
+      };
+
+      animate();
+  
+  };
+
+  </script>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+</body>
+</html>
