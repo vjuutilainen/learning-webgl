@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Learning WebGL</title>
+  <style type="text/css">
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: Arial;
+    }
+  </style>
+  <script type="text/javascript">
+
+    window.onload = () => {
+
+      // Set up canvas and WebGL context 
+      let canvas = document.getElementById('canvas');
+      canvas.setAttribute('width', window.innerWidth);
+      canvas.setAttribute('height', window.innerHeight);
+      let gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      gl.viewport(0, 0, canvas.width, canvas.height);
+
+      // The uniform variables to be used in shaders
+      let u_time = null;
+      let u_resolution = null;
+      let u_mouse = null;
+
+      // Enable depth testing, and pass if the incoming value equals the the depth buffer value
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LEQUAL);
+
+      // The color the use for clearing color buffers
+      gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+      // Buffers
+      let positionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+      // What will be drawn
+      
+      // Vertices for GL_TRIANGLE_FAN, for making a rectangle
+      // The first vertex is a hub and the following connect with the previous non-starting vertex and the hub.
+      let vertices = [
+          -1.0, -1.0, // bottom left
+          +1.0, -1.0, // bottom right
+          +1.0, +1.0, // top right
+          -1.0, +1.0  // top left
+      ];
+
+      // GLSL code source for vertex shaders = vertex position and shape
+      const v_src = `
+
+      attribute vec2 a_position;
+
+      void main(void) {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+      }
+
+      `;
+
+      // GLSL code source for fragment shaders = pixel color
+      const f_src = `
+
+      precision highp float;
+      uniform float u_time;
+      uniform vec2 u_resolution;
+      uniform vec2 u_mouse;
+
+      void main(void) {
+
+        float time = abs(sin(u_time * 0.001));
+        vec2 resolution = vec2(gl_FragCoord.xy / u_resolution);
+        vec2 mouse = u_mouse / u_resolution; // not using mouse in this example
+        
+        // The resulting pixel should be bright in the center, and get darker as the pixel coordinates are further away from center
+        
+        // The center coordinates
+        vec2 center = vec2(0.5); 
+
+        // Difference between coordinates
+        vec2 diff = center - resolution;     
+
+        // Using the Pythagorean distance formula
+        // (We could also use GLSL distance or length functions, but this way it's fun to experiment with the time value)
+        float result = sqrt( pow(diff[0], 2.0 * time) + pow(diff[1], 2.0 * time) );
+        
+        // This time we transform all of the RGB values at once
+        vec3 color = vec3(1.0, 0.0, 1.0) - vec3(result);
+
+        gl_FragColor = vec4(color, 1.0);
+
+      }
+
+      `;
+
+
+      // Set up the program and uniform variables
+
+      let program = gl.createProgram();
+
+      let vertexShader = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vertexShader, v_src);
+      gl.compileShader(vertexShader);
+
+      let fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fragmentShader, f_src);
+      gl.compileShader(fragmentShader);
+
+      gl.attachShader(program, vertexShader);
+      gl.attachShader(program, fragmentShader);
+      
+      gl.linkProgram(program);
+      gl.useProgram(program);
+      
+      let positionAttribute = gl.getAttribLocation(program, 'a_position');
+      gl.enableVertexAttribArray(positionAttribute);
+      gl.vertexAttribPointer(positionAttribute, 2, gl.FLOAT, false, 0, 0);
+      
+      u_time = gl.getUniformLocation(program, 'u_time');
+      gl.uniform1f(u_time, 0);
+      
+      u_resolution = gl.getUniformLocation(program, 'u_resolution');
+      gl.uniform2fv(u_resolution, [canvas.width, canvas.height]);
+      
+      u_mouse = gl.getUniformLocation(program, 'u_mouse');
+      gl.uniform2fv(u_mouse, [canvas.width / 2, canvas.height / 2]);
+
+
+      // Set up the main functions
+      
+      const draw = () => {
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+      };
+
+      const animate = () => {
+        let start = Date.now();
+        let tick = () => {
+          requestAnimationFrame(tick);
+          let now = Date.now();
+          let time = now - start;
+          gl.uniform1f(u_time, time); // update the time variable for the shader program
+          draw();
+        }
+        requestAnimationFrame(tick);
+      }
+
+
+      // Events
+
+      // Set new size and render on resize
+      window.onresize = () => {
+        canvas.setAttribute('width', window.innerWidth);
+        canvas.setAttribute('height', window.innerHeight);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.uniform2fv(u_resolution, [canvas.width, canvas.height]); // update the resolution variable for the shader program
+      };
+
+      // Update mouse coordinates on mousemove
+      window.onmousemove = (e) => {
+        gl.uniform2fv(u_mouse, [e.clientX, e.clientY]);
+      };
+
+      animate();
+  
+  };
+
+  </script>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+</body>
+</html>
